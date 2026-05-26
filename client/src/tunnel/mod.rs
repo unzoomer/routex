@@ -2,29 +2,29 @@ use wintun;
 use std::sync::Arc;
 use log::info;
 
-pub fn create_adapter() -> anyhow::Result<wintun::Adapter> {
-    let wintun = unsafe {
+pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
+    let wintun_lib = unsafe {
         wintun::load_from_path("wintun.dll")
             .expect("Failed to load wintun.dll")
     };
 
-    let adapter = match wintun::Adapter::open(&wintun, "RouteX") {
+    let adapter = match wintun::Adapter::open(&wintun_lib, "RouteX") {
         Ok(a) => {
             info!("Opened existing RouteX adapter");
             a
         }
         Err(_) => {
             info!("Creating new RouteX adapter...");
-            wintun::Adapter::create(&wintun, "RouteX", "RouteX Tunnel", None)
+            wintun::Adapter::create(&wintun_lib, "RouteX", "RouteX Tunnel", None)
                 .expect("Failed to create adapter")
         }
     };
 
-    Ok(adapter)
+    Ok(Arc::new(adapter))
 }
 
 pub async fn connect(
-    adapter: wintun::Adapter,
+    adapter: Arc<wintun::Adapter>,
     _server_addr: &str,
 ) -> anyhow::Result<()> {
     let session = Arc::new(
@@ -53,6 +53,5 @@ pub async fn connect(
     });
 
     read_handle.await?;
-
     Ok(())
 }
