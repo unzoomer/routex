@@ -1,57 +1,19 @@
-use wintun;
-use std::sync::Arc;
+mod tunnel;
+mod routing;
+
 use log::info;
 
-pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
-    let wintun_lib = unsafe {
-        wintun::load_from_path("wintun.dll")
-            .expect("Failed to load wintun.dll")
-    };
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    env_logger::init();
 
-    let adapter = match wintun::Adapter::open(&wintun_lib, "RouteX") {
-        Ok(a) => {
-            info!("Opened existing RouteX adapter");
-            a
-        }
-        Err(_) => {
-            info!("Creating new RouteX adapter...");
-            wintun::Adapter::create(&wintun_lib, "RouteX", "RouteX Tunnel", None)
-                .expect("Failed to create adapter")
-        }
-    };
+    info!("RouteX starting...");
 
-    Ok(Arc::new(adapter))
-}
+    let adapter = tunnel::create_adapter()?;
+    info!("TUN adapter created");
 
-pub async fn connect(
-    adapter: Arc<wintun::Adapter>,
-    _server_addr: &str,
-) -> anyhow::Result<()> {
-    let session = Arc::new(
-        adapter.start_session(wintun::MAX_RING_CAPACITY)?
-    );
+    let server_ip = "127.0.0.1:51820";
+    tunnel::connect(adapter, server_ip).await?;
 
-    info!("Session started, capturing packets...");
-
-    let session_reader = session.clone();
-
-    let read_handle = tokio::spawn(async move {
-        loop {
-            match session_reader.receive_blocking() {
-                Ok(packet) => {
-                    log::debug!(
-                        "Captured packet: {} bytes",
-                        packet.bytes().len()
-                    );
-                }
-                Err(e) => {
-                    log::error!("Read error: {}", e);
-                    break;
-                }
-            }
-        }
-    });
-
-    read_handle.await?;
     Ok(())
 }
