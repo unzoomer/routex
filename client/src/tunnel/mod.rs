@@ -20,7 +20,7 @@ pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
         }
     };
 
-    Ok(Arc::new(adapter))
+    Ok(adapter)
 }
 
 pub async fn connect(
