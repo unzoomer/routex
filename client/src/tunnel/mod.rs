@@ -8,17 +8,8 @@ pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
             .expect("Failed to load wintun.dll")
     };
 
-    let adapter = match wintun::Adapter::open(&wintun_lib, "RouteX") {
-        Ok(a) => {
-            info!("Opened existing RouteX adapter");
-            a
-        }
-        Err(_) => {
-            info!("Creating new RouteX adapter...");
-            wintun::Adapter::create(&wintun_lib, "RouteX", "RouteX Tunnel", None)
-                .expect("Failed to create adapter")
-        }
-    };
+    let adapter = wintun::Adapter::create(&wintun_lib, "RouteX", "RouteX Tunnel", None)
+        .expect("Failed to create adapter");
 
     Ok(adapter)
 }
@@ -31,7 +22,7 @@ pub async fn connect(
         adapter.start_session(wintun::MAX_RING_CAPACITY)?
     );
 
-    info!("Session started, capturing packets...");
+    info!("Session started!");
 
     let session_reader = session.clone();
 
@@ -39,13 +30,10 @@ pub async fn connect(
         loop {
             match session_reader.receive_blocking() {
                 Ok(packet) => {
-                    log::debug!(
-                        "Captured packet: {} bytes",
-                        packet.bytes().len()
-                    );
+                    log::debug!("Packet: {} bytes", packet.bytes().len());
                 }
                 Err(e) => {
-                    log::error!("Read error: {}", e);
+                    log::error!("Error: {}", e);
                     break;
                 }
             }
