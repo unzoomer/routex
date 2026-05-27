@@ -201,9 +201,12 @@ impl eframe::App for RouteXApp {
                             });
                         });
 
-                    if ui.interact(ui.min_rect(), ui.id().with(i), egui::Sense::click()).clicked() {
-                        self.selected_server = i;
-                    }
+                   if ui.button(RichText::new(if is_sel { "[*]" } else { "[ ]" })
+    .font(FontId::monospace(11.0))
+    .color(frame_color)).clicked()
+{
+    self.selected_server = i;
+}
                     ui.add_space(4.0);
                 }
             });
