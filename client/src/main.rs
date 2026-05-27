@@ -2,12 +2,9 @@ mod tunnel;
 mod routing;
 mod ui;
 
-use log::info;
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
-    info!("RouteX starting...");
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -20,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
     eframe::run_native(
         "RouteX",
         options,
-        Box::new(|_cc| Ok(Box::new(ui::RouteXApp::default()))),
+        Box::new(|_cc| Box::new(ui::RouteXApp::default())),
     ).unwrap();
 
     Ok(())
