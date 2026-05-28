@@ -2621,6 +2621,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "ping"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "044b1fa4f259f4df9ad5078e587b208f5d288a25407575fcddb9face30c7c692"
+dependencies = [
+ "rand",
+ "socket2 0.6.3",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "piper"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2946,6 +2957,7 @@ dependencies = [
  "egui",
  "env_logger",
  "log",
+ "ping",
  "serde",
  "serde_json",
  "tokio",

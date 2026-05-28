@@ -7,6 +7,8 @@ pub struct RouteXApp {
     ping_history: Vec<f32>,
     frame: u64,
     tunnel_tx: Option<std::sync::mpsc::Sender<bool>>,
+    ping_rx: Option<std::sync::mpsc::Receiver<f32>>,
+    current_ping: f32,
 }
 
 impl Default for RouteXApp {
@@ -17,6 +19,8 @@ impl Default for RouteXApp {
             ping_history: vec![38.0,35.0,30.0,28.0,26.0,24.0,27.0,25.0,23.0,24.0],
             frame: 0,
             tunnel_tx: None,
+            ping_rx: None,
+            current_ping: 0.0,
         }
     }
 }
@@ -46,13 +50,16 @@ impl eframe::App for RouteXApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame += 1;
 
-        if self.connected && self.frame % 20 == 0 {
-            let ping = 20.0 + (self.frame as f32 * 0.2).sin().abs() * 12.0;
-            self.ping_history.push(ping);
-            if self.ping_history.len() > 50 {
-                self.ping_history.remove(0);
-            }
+// Получаем реальный пинг из фонового потока
+if let Some(rx) = &self.ping_rx {
+    if let Ok(ping) = rx.try_recv() {
+        self.current_ping = ping;
+        self.ping_history.push(ping);
+        if self.ping_history.len() > 50 {
+            self.ping_history.remove(0);
         }
+    }
+}
 
         ctx.style_mut(|s| {
             s.visuals.panel_fill = BG;
@@ -175,6 +182,10 @@ impl eframe::App for RouteXApp {
                         if btn.clicked() {
     self.connected = !self.connected;
     if self.connected {
+if btn.clicked() {
+    self.connected = !self.connected;
+    if self.connected {
+        // Туннель
         let (tx, rx) = std::sync::mpsc::channel::<bool>();
         self.tunnel_tx = Some(tx);
 
@@ -187,7 +198,7 @@ impl eframe::App for RouteXApp {
                             adapter,
                             "139.100.219.5:51820",
                             &std::env::var("ROUTEX_PRIVATE_KEY").unwrap_or_default(),
-    "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
+                            "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
                         );
                         if let Err(e) = tunnel.run().await {
                             log::error!("Tunnel error: {}", e);
@@ -198,7 +209,31 @@ impl eframe::App for RouteXApp {
                 let _ = rx;
             });
         });
+
+        // Пинг в фоне
+        let (ping_tx, ping_rx) = std::sync::mpsc::channel::<f32>();
+        self.ping_rx = Some(ping_rx);
+
+        std::thread::spawn(move || {
+            loop {
+                let start = std::time::Instant::now();
+                let sock = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+                sock.set_read_timeout(Some(
+                    std::time::Duration::from_secs(2)
+                )).unwrap();
+                let _ = sock.send_to(b"ping", "139.100.219.5:7777");
+                let ping = start.elapsed().as_millis() as f32;
+                let _ = ping_tx.send(ping);
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        });
+
     } else {
+        self.tunnel_tx = None;
+        self.ping_rx = None;
+        self.current_ping = 0.0;
+    }
+}} else {
         self.tunnel_tx = None;
     }
 }
@@ -211,7 +246,7 @@ impl eframe::App for RouteXApp {
                 let ping_val = self.ping_history.last().copied().unwrap_or(0.0);
                 ui.horizontal(|ui| {
                     let metrics = [
-                        ("LATENCY",   format!("{:.0}ms", if self.connected { ping_val } else { 0.0 }), CYAN),
+                        ("LATENCY", format!("{:.0}ms", if self.connected { self.current_ping } else { 0.0 }), CYAN),
                         ("PKT LOSS",  "0.2%".to_string(), CYAN),
                         ("TRAFFIC",   "1.4 mb/s".to_string(), YELLOW),
                     ];
