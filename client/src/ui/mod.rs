@@ -6,6 +6,7 @@ pub struct RouteXApp {
     selected_server: usize,
     ping_history: Vec<f32>,
     frame: u64,
+    tunnel_tx: Option<std::sync::mpsc::Sender<bool>>,
 }
 
 impl Default for RouteXApp {
@@ -15,6 +16,7 @@ impl Default for RouteXApp {
             selected_server: 0,
             ping_history: vec![38.0,35.0,30.0,28.0,26.0,24.0,27.0,25.0,23.0,24.0],
             frame: 0,
+            tunnel_tx: None,
         }
     }
 }
@@ -171,8 +173,35 @@ impl eframe::App for RouteXApp {
                             .fill(BG2)
                             .stroke(Stroke::new(1.0, btn_color)));
                         if btn.clicked() {
-                            self.connected = !self.connected;
+    self.connected = !self.connected;
+    if self.connected {
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
+        self.tunnel_tx = Some(tx);
+
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                match crate::tunnel::create_adapter() {
+                    Ok(adapter) => {
+                        let tunnel = crate::tunnel::WireGuardTunnel::new(
+                            adapter,
+                            "139.100.219.5:51820",
+                            env!("ROUTEX_PRIVATE_KEY"),
+                            "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
+                        );
+                        if let Err(e) = tunnel.run().await {
+                            log::error!("Tunnel error: {}", e);
                         }
+                    }
+                    Err(e) => log::error!("Adapter error: {}", e),
+                }
+                let _ = rx;
+            });
+        });
+    } else {
+        self.tunnel_tx = None;
+    }
+}
                     });
                 });
 
