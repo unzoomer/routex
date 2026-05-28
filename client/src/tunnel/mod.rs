@@ -30,7 +30,6 @@ impl WireGuardTunnel {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
-        // Декодируем ключи
         let privkey_bytes = general_purpose::STANDARD
             .decode(&self.private_key)?;
         let pubkey_bytes = general_purpose::STANDARD
@@ -43,7 +42,6 @@ impl WireGuardTunnel {
             <[u8; 32]>::try_from(pubkey_bytes.as_slice())?
         );
 
-        // Создаём WireGuard туннель
         let tun = Tunn::new(
             private_key,
             server_public,
@@ -54,15 +52,12 @@ impl WireGuardTunnel {
         ).map_err(|e| anyhow::anyhow!("WG init error: {}", e))?;
 
         let tun = Arc::new(std::sync::Mutex::new(tun));
-
-        // UDP сокет для связи с VPS
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(&self.server_addr)?;
         let socket = Arc::new(socket);
 
         info!("WireGuard tunnel connecting to {}", self.server_addr);
 
-        // Сессия wintun
         let session = Arc::new(
             self.adapter.start_session(wintun::MAX_RING_CAPACITY)?
         );
@@ -73,7 +68,6 @@ impl WireGuardTunnel {
         let socket_send = socket.clone();
         let session_read = session.clone();
 
-        // Поток: wintun → WireGuard → VPS
         let send_handle = std::thread::spawn(move || {
             let mut buf = vec![0u8; 65535];
             loop {
@@ -81,7 +75,6 @@ impl WireGuardTunnel {
                     Ok(packet) => {
                         let data = packet.bytes().to_vec();
                         debug!("wintun → VPS: {} bytes", data.len());
-
                         let mut tun = tun_send.lock().unwrap();
                         match tun.encapsulate(&data, &mut buf) {
                             TunnResult::WriteToNetwork(encrypted) => {
@@ -100,7 +93,6 @@ impl WireGuardTunnel {
             }
         });
 
-        // Поток: VPS → WireGuard → wintun
         let tun_recv = tun.clone();
         let socket_recv = socket.clone();
         let session_write = session.clone();
@@ -139,7 +131,7 @@ impl WireGuardTunnel {
     }
 }
 
-pub fn create_adapter() -> anyhow::Result<wintun::Adapter> {
+pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
     let wintun_lib = unsafe {
         wintun::load_from_path("wintun.dll")
             .expect("Failed to load wintun.dll")
@@ -149,5 +141,5 @@ pub fn create_adapter() -> anyhow::Result<wintun::Adapter> {
         &wintun_lib, "RouteX", "RouteX Tunnel", None
     ).expect("Failed to create adapter");
 
-    Ok(adapter)
+    Ok(Arc::new(adapter))
 }
