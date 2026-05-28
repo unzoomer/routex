@@ -45,30 +45,30 @@ func (s *Server) Start() error {
 		}
 
 		key := remoteAddr.String()
+		data := buf[:n]
 
-		// Регистрируем клиента
+		// Отвечаем на пинг
+		if n == 4 && string(data) == "ping" {
+			conn.WriteToUDP([]byte("pong"), remoteAddr)
+			continue
+		}
+
 		if _, ok := clients[key]; !ok {
 			log.Printf("[relay] New client: %s", key)
 		}
 		clients[key] = &Client{addr: remoteAddr, last: time.Now()}
 
-		// Пересылаем пакет всем остальным клиентам
-		data := make([]byte, n)
-		copy(data, buf[:n])
-
 		for k, c := range clients {
 			if k == key {
 				continue
 			}
-			// Удаляем старых клиентов (>30 сек)
 			if time.Since(c.last) > 30*time.Second {
 				delete(clients, k)
 				continue
 			}
-			_, err := conn.WriteToUDP(data, c.addr)
-			if err != nil {
-				log.Printf("[relay] Write error to %s: %v", k, err)
-			}
+			outData := make([]byte, n)
+			copy(outData, data)
+			conn.WriteToUDP(outData, c.addr)
 		}
 	}
 }
