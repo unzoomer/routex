@@ -179,9 +179,6 @@ if let Some(rx) = &self.ping_rx {
                                 .color(btn_color))
                             .fill(BG2)
                             .stroke(Stroke::new(1.0, btn_color)));
-                        if btn.clicked() {
-    self.connected = !self.connected;
-    if self.connected {
 if btn.clicked() {
     self.connected = !self.connected;
     if self.connected {
