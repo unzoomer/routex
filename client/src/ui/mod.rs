@@ -186,8 +186,7 @@ impl eframe::App for RouteXApp {
                         let tunnel = crate::tunnel::WireGuardTunnel::new(
                             adapter,
                             "139.100.219.5:51820",
-                            env!("ROUTEX_PRIVATE_KEY"),
-                            "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
+                            &std::env::var("ROUTEX_PRIVATE_KEY").unwrap_or_default(),
                         );
                         if let Err(e) = tunnel.run().await {
                             log::error!("Tunnel error: {}", e);
