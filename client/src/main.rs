@@ -1,6 +1,7 @@
 mod tunnel;
 mod routing;
 mod ui;
+mod games;
 
 use tray_icon::{
     TrayIconBuilder,

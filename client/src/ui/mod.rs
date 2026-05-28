@@ -9,6 +9,9 @@ pub struct RouteXApp {
     tunnel_tx: Option<std::sync::mpsc::Sender<bool>>,
     ping_rx: Option<std::sync::mpsc::Receiver<f32>>,
     current_ping: f32,
+    selected_game: usize,
+    game_detector: crate::games::GameDetector,
+    running_games: Vec<&'static crate::games::Game>,
 }
 
 impl Default for RouteXApp {
@@ -21,6 +24,9 @@ impl Default for RouteXApp {
             tunnel_tx: None,
             ping_rx: None,
             current_ping: 0.0,
+            selected_game: 0,
+            game_detector: crate::games::GameDetector::new(),
+            running_games: Vec::new(),
         }
     }
 }
@@ -290,7 +296,60 @@ impl eframe::App for RouteXApp {
                 }
 
                 ui.add_space(10.0);
+// Обнаружение игр каждые 2 секунды
+if self.frame % 120 == 0 {
+    self.running_games = self.game_detector.detect_running();
+}
 
+ui.label(RichText::new("# game_detect --auto")
+    .font(FontId::monospace(10.0))
+    .color(CYAN_DIM));
+ui.add_space(4.0);
+
+if self.running_games.is_empty() {
+    egui::Frame::none()
+        .fill(BG2)
+        .stroke(Stroke::new(1.0, GRAY))
+        .inner_margin(8.0)
+        .show(ui, |ui| {
+            ui.label(RichText::new("[ ] no games detected — launch a game")
+                .font(FontId::monospace(11.0))
+                .color(GRAY));
+        });
+} else {
+    for (i, game) in self.running_games.iter().enumerate() {
+        let is_sel = self.selected_game == i;
+        let border_color = if is_sel { CYAN } else { GRAY };
+        let resp = egui::Frame::none()
+            .fill(BG2)
+            .stroke(Stroke::new(if is_sel { 1.5 } else { 1.0 }, border_color))
+            .inner_margin(8.0)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(if is_sel { "[*]" } else { "[ ]" })
+                        .font(FontId::monospace(11.0))
+                        .color(border_color));
+                    ui.label(RichText::new(game.name)
+                        .font(FontId::monospace(11.0))
+                        .color(CYAN));
+                    ui.label(RichText::new(game.process)
+                        .font(FontId::monospace(9.0))
+                        .color(GRAY));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(RichText::new("● RUNNING")
+                            .font(FontId::monospace(9.0))
+                            .color(Color32::from_rgb(0, 200, 100)));
+                    });
+                });
+            });
+        if resp.response.interact(egui::Sense::click()).clicked() {
+            self.selected_game = i;
+        }
+        ui.add_space(4.0);
+    }
+}
+
+ui.add_space(8.0);
                 // Серверы
                 ui.label(RichText::new("# node_list --sort=latency")
                     .font(FontId::monospace(10.0))
