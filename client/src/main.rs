@@ -2,9 +2,17 @@ mod tunnel;
 mod routing;
 mod ui;
 
+use log::info;
+
+// Конфиг WireGuard — замени на свои ключи
+const SERVER_ADDR: &str = "139.100.219.5:51820";
+const CLIENT_PRIVATE_KEY: &str = "0NRGDaPPMSwY8qPMUP9Nx+gbh5nAyKEtKU58rzzv3Hk=";
+const SERVER_PUBLIC_KEY: &str = "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=";
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
+    info!("RouteX starting...");
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
