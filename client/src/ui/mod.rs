@@ -243,7 +243,7 @@ if btn.clicked() {
                 ui.add_space(10.0);
 
                 // Метрики
-                let ping_val = self.ping_history.last().copied().unwrap_or(0.0);
+                let _ping_val = self.ping_history.last().copied().unwrap_or(0.0);
                 ui.horizontal(|ui| {
                     let metrics = [
                         ("LATENCY", format!("{:.0}ms", if self.connected { self.current_ping } else { 0.0 }), CYAN),
