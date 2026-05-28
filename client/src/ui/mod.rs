@@ -50,16 +50,16 @@ impl eframe::App for RouteXApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame += 1;
 
-// Получаем реальный пинг из фонового потока
-if let Some(rx) = &self.ping_rx {
-    if let Ok(ping) = rx.try_recv() {
-        self.current_ping = ping;
-        self.ping_history.push(ping);
-        if self.ping_history.len() > 50 {
-            self.ping_history.remove(0);
+        // Реальный пинг из фонового потока
+        if let Some(rx) = &self.ping_rx {
+            if let Ok(ping) = rx.try_recv() {
+                self.current_ping = ping;
+                self.ping_history.push(ping);
+                if self.ping_history.len() > 50 {
+                    self.ping_history.remove(0);
+                }
+            }
         }
-    }
-}
 
         ctx.style_mut(|s| {
             s.visuals.panel_fill = BG;
@@ -98,16 +98,14 @@ if let Some(rx) = &self.ping_rx {
                 });
                 ui.add_space(14.0);
 
-                let nav_items = [
+                for (name, active) in [
                     ("dashboard", true),
                     ("nodes",     false),
                     ("games",     false),
                     ("logs",      false),
                     ("config",    false),
                     ("identity",  false),
-                ];
-
-                for (name, active) in nav_items {
+                ] {
                     let color = if active { CYAN } else { GRAY };
                     let prefix = if active { "> " } else { "  " };
                     ui.horizontal(|ui| {
@@ -179,73 +177,70 @@ if let Some(rx) = &self.ping_rx {
                                 .color(btn_color))
                             .fill(BG2)
                             .stroke(Stroke::new(1.0, btn_color)));
-if btn.clicked() {
-    self.connected = !self.connected;
-    if self.connected {
-        // Туннель
-        let (tx, rx) = std::sync::mpsc::channel::<bool>();
-        self.tunnel_tx = Some(tx);
 
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                match crate::tunnel::create_adapter() {
-                    Ok(adapter) => {
-                        let tunnel = crate::tunnel::WireGuardTunnel::new(
-                            adapter,
-                            "139.100.219.5:51820",
-                            &std::env::var("ROUTEX_PRIVATE_KEY").unwrap_or_default(),
-                            "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
-                        );
-                        if let Err(e) = tunnel.run().await {
-                            log::error!("Tunnel error: {}", e);
+                        if btn.clicked() {
+                            self.connected = !self.connected;
+                            if self.connected {
+                                // Туннель
+                                let (tx, rx) = std::sync::mpsc::channel::<bool>();
+                                self.tunnel_tx = Some(tx);
+
+                                std::thread::spawn(move || {
+                                    let rt = tokio::runtime::Runtime::new().unwrap();
+                                    rt.block_on(async {
+                                        match crate::tunnel::create_adapter() {
+                                            Ok(adapter) => {
+                                                let tunnel = crate::tunnel::WireGuardTunnel::new(
+                                                    adapter,
+                                                    "139.100.219.5:51820",
+                                                    &std::env::var("ROUTEX_PRIVATE_KEY").unwrap_or_default(),
+                                                    "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
+                                                );
+                                                if let Err(e) = tunnel.run().await {
+                                                    log::error!("Tunnel error: {}", e);
+                                                }
+                                            }
+                                            Err(e) => log::error!("Adapter error: {}", e),
+                                        }
+                                        let _ = rx;
+                                    });
+                                });
+
+                                // Пинг в фоне
+                                let (ping_tx, ping_rx) = std::sync::mpsc::channel::<f32>();
+                                self.ping_rx = Some(ping_rx);
+
+                                std::thread::spawn(move || {
+                                    loop {
+                                        let start = std::time::Instant::now();
+                                        let sock = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+                                        sock.set_read_timeout(Some(
+                                            std::time::Duration::from_secs(2)
+                                        )).unwrap();
+                                        let _ = sock.send_to(b"ping", "139.100.219.5:7777");
+                                        let ping = start.elapsed().as_millis() as f32;
+                                        let _ = ping_tx.send(ping);
+                                        std::thread::sleep(std::time::Duration::from_secs(1));
+                                    }
+                                });
+
+                            } else {
+                                self.tunnel_tx = None;
+                                self.ping_rx = None;
+                                self.current_ping = 0.0;
+                            }
                         }
-                    }
-                    Err(e) => log::error!("Adapter error: {}", e),
-                }
-                let _ = rx;
-            });
-        });
-
-        // Пинг в фоне
-        let (ping_tx, ping_rx) = std::sync::mpsc::channel::<f32>();
-        self.ping_rx = Some(ping_rx);
-
-        std::thread::spawn(move || {
-            loop {
-                let start = std::time::Instant::now();
-                let sock = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
-                sock.set_read_timeout(Some(
-                    std::time::Duration::from_secs(2)
-                )).unwrap();
-                let _ = sock.send_to(b"ping", "139.100.219.5:7777");
-                let ping = start.elapsed().as_millis() as f32;
-                let _ = ping_tx.send(ping);
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-        });
-
-    } else {
-        self.tunnel_tx = None;
-        self.ping_rx = None;
-        self.current_ping = 0.0;
-    }
-}} else {
-        self.tunnel_tx = None;
-    }
-}
                     });
                 });
 
                 ui.add_space(10.0);
 
                 // Метрики
-                let _ping_val = self.ping_history.last().copied().unwrap_or(0.0);
                 ui.horizontal(|ui| {
                     let metrics = [
                         ("LATENCY", format!("{:.0}ms", if self.connected { self.current_ping } else { 0.0 }), CYAN),
-                        ("PKT LOSS",  "0.2%".to_string(), CYAN),
-                        ("TRAFFIC",   "1.4 mb/s".to_string(), YELLOW),
+                        ("PKT LOSS", "0.2%".to_string(), CYAN),
+                        ("TRAFFIC",  "1.4 mb/s".to_string(), YELLOW),
                     ];
                     for (label, value, color) in metrics {
                         egui::Frame::none()
