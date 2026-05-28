@@ -145,9 +145,9 @@ pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
             .expect("Failed to load wintun.dll")
     };
 
-    let adapter = wintun::Adapter::create(
+    let adapter = Arc::new(wintun::Adapter::create(
         &wintun_lib, "RouteX", "RouteX Tunnel", None
-    ).expect("Failed to create adapter");
+    ).expect("Failed to create adapter"));
 
-    Ok(Arc::new(adapter))
+    Ok(adapter)
 }
