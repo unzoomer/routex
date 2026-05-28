@@ -187,6 +187,7 @@ impl eframe::App for RouteXApp {
                             adapter,
                             "139.100.219.5:51820",
                             &std::env::var("ROUTEX_PRIVATE_KEY").unwrap_or_default(),
+    "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
                         );
                         if let Err(e) = tunnel.run().await {
                             log::error!("Tunnel error: {}", e);
