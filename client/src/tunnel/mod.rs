@@ -139,7 +139,7 @@ impl WireGuardTunnel {
     }
 }
 
-pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
+pub fn create_adapter() -> anyhow::Result<wintun::Adapter> {
     let wintun_lib = unsafe {
         wintun::load_from_path("wintun.dll")
             .expect("Failed to load wintun.dll")
@@ -149,5 +149,5 @@ pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
         &wintun_lib, "RouteX", "RouteX Tunnel", None
     ).expect("Failed to create adapter");
 
-    Ok(Arc::new(adapter))
+    Ok(adapter)
 }
