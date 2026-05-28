@@ -141,5 +141,5 @@ pub fn create_adapter() -> anyhow::Result<Arc<wintun::Adapter>> {
         &wintun_lib, "RouteX", "RouteX Tunnel", None
     ).expect("Failed to create adapter");
 
-    Ok(Arc::new(adapter))
+    Ok(adapter)
 }
