@@ -211,18 +211,21 @@ impl eframe::App for RouteXApp {
                                 self.ping_rx = Some(ping_rx);
 
                                 std::thread::spawn(move || {
-                                    loop {
-                                        let start = std::time::Instant::now();
-                                        let sock = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
-                                        sock.set_read_timeout(Some(
-                                            std::time::Duration::from_secs(2)
-                                        )).unwrap();
-                                        let _ = sock.send_to(b"ping", "139.100.219.5:7777");
-                                        let ping = start.elapsed().as_millis() as f32;
-                                        let _ = ping_tx.send(ping);
-                                        std::thread::sleep(std::time::Duration::from_secs(1));
-                                    }
-                                });
+                                   loop {
+        let sock = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+        sock.set_read_timeout(Some(
+            std::time::Duration::from_millis(2000)
+        )).unwrap();
+        let start = std::time::Instant::now();
+        let _ = sock.send_to(b"ping", "139.100.219.5:7777");
+        let mut buf = [0u8; 4];
+        if sock.recv(&mut buf).is_ok() {
+            let ping = start.elapsed().as_millis() as f32;
+            let _ = ping_tx.send(ping);
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+});
 
                             } else {
                                 self.tunnel_tx = None;
