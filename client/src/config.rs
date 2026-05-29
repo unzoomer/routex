@@ -32,7 +32,8 @@ impl Config {
 
     fn generate_key() -> String {
         use boringtun::x25519;
-        let secret = x25519::StaticSecret::random_from_rng(rand::thread_rng());
+        let mut rng = rand::thread_rng();
+        let secret = x25519::StaticSecret::random_from_rng(&mut rng);
         use base64::{Engine as _, engine::general_purpose};
         general_purpose::STANDARD.encode(secret.as_bytes())
     }
