@@ -17,6 +17,13 @@ pub struct RouteXApp {
     server_public_key: String,
     direct_ping: f32,
     direct_rx: Option<std::sync::mpsc::Receiver<f32>>,
+    // Auth
+    auth_email: String,
+    auth_password: String,
+    auth_token: Option<String>,
+    auth_error: String,
+    logged_in: bool,
+    auth_screen: bool,
 }
 
 impl Default for RouteXApp {
@@ -37,6 +44,12 @@ impl Default for RouteXApp {
             server_public_key: "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=".to_string(),
             direct_ping: 0.0,
             direct_rx: None,
+            auth_email: String::new(),
+            auth_password: String::new(),
+            auth_token: None,
+            auth_error: String::new(),
+            logged_in: false,
+            auth_screen: true,
         }
     }
 }
@@ -48,6 +61,52 @@ impl RouteXApp {
             server_addr: cfg.server_addr,
             server_public_key: cfg.server_public_key,
             ..Default::default()
+        }
+    }
+
+    fn do_login(email: &str, password: &str) -> Result<String, String> {
+        let body = format!(r#"{{"email":"{}","password":"{}"}}"#, email, password);
+        let output = std::process::Command::new("curl")
+            .args([
+                "-s", "-X", "POST",
+                "http://139.100.219.5:8081/auth/login",
+                "-H", "Content-Type: application/json",
+                "-d", &body,
+            ])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&output.stdout);
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|_| "Server error".to_string())?;
+        if let Some(token) = json["token"].as_str() {
+            Ok(token.to_string())
+        } else if let Some(err) = json["error"].as_str() {
+            Err(err.to_string())
+        } else {
+            Err("Unknown error".to_string())
+        }
+    }
+
+    fn do_register(email: &str, password: &str) -> Result<(), String> {
+        let body = format!(r#"{{"email":"{}","password":"{}"}}"#, email, password);
+        let output = std::process::Command::new("curl")
+            .args([
+                "-s", "-X", "POST",
+                "http://139.100.219.5:8081/auth/register",
+                "-H", "Content-Type: application/json",
+                "-d", &body,
+            ])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&output.stdout);
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|_| "Server error".to_string())?;
+        if json["message"].as_str().is_some() {
+            Ok(())
+        } else if let Some(err) = json["error"].as_str() {
+            Err(err.to_string())
+        } else {
+            Err("Unknown error".to_string())
         }
     }
 }
@@ -107,6 +166,113 @@ impl eframe::App for RouteXApp {
             s.visuals.widgets.active.bg_fill = Color32::from_rgb(0, 40, 50);
         });
 
+        // Экран логина
+        if self.auth_screen {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none()
+                    .fill(BG)
+                    .inner_margin(egui::Margin::symmetric(80.0, 40.0)))
+                .show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(30.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(ui.available_width() / 2.0 - 40.0);
+                            ui.label(RichText::new("ROUTE")
+                                .font(FontId::monospace(28.0))
+                                .color(CYAN)
+                                .strong());
+                            ui.label(RichText::new("X")
+                                .font(FontId::monospace(28.0))
+                                .color(RED)
+                                .strong());
+                        });
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("v0.1.0-alpha")
+                            .font(FontId::monospace(10.0))
+                            .color(CYAN_DIM));
+                        ui.add_space(24.0);
+
+                        ui.label(RichText::new("# login --interactive")
+                            .font(FontId::monospace(11.0))
+                            .color(CYAN_DIM));
+                        ui.add_space(12.0);
+
+                        ui.label(RichText::new("EMAIL")
+                            .font(FontId::monospace(10.0))
+                            .color(CYAN_DIM));
+                        ui.add(egui::TextEdit::singleline(&mut self.auth_email)
+                            .font(FontId::monospace(13.0))
+                            .desired_width(260.0)
+                            .hint_text("user@example.com"));
+                        ui.add_space(8.0);
+
+                        ui.label(RichText::new("PASSWORD")
+                            .font(FontId::monospace(10.0))
+                            .color(CYAN_DIM));
+                        ui.add(egui::TextEdit::singleline(&mut self.auth_password)
+                            .font(FontId::monospace(13.0))
+                            .desired_width(260.0)
+                            .password(true)
+                            .hint_text("••••••••"));
+                        ui.add_space(12.0);
+
+                        if !self.auth_error.is_empty() {
+                            let err_color = if self.auth_error.contains("Registered") { GREEN } else { RED };
+                            ui.label(RichText::new(&self.auth_error)
+                                .font(FontId::monospace(11.0))
+                                .color(err_color));
+                            ui.add_space(8.0);
+                        }
+
+                        ui.horizontal(|ui| {
+                            ui.add_space(ui.available_width() / 2.0 - 100.0);
+
+                            let login_btn = ui.add(egui::Button::new(
+                                RichText::new("[ LOGIN ]")
+                                    .font(FontId::monospace(12.0))
+                                    .color(CYAN))
+                                .fill(BG2)
+                                .stroke(Stroke::new(1.0, CYAN)));
+
+                            ui.add_space(8.0);
+
+                            let reg_btn = ui.add(egui::Button::new(
+                                RichText::new("[ REGISTER ]")
+                                    .font(FontId::monospace(12.0))
+                                    .color(GRAY))
+                                .fill(BG2)
+                                .stroke(Stroke::new(1.0, GRAY)));
+
+                            if login_btn.clicked() {
+                                let email = self.auth_email.clone();
+                                let password = self.auth_password.clone();
+                                match Self::do_login(&email, &password) {
+                                    Ok(token) => {
+                                        self.auth_token = Some(token);
+                                        self.auth_screen = false;
+                                        self.logged_in = true;
+                                        self.auth_error.clear();
+                                    }
+                                    Err(e) => self.auth_error = e,
+                                }
+                            }
+
+                            if reg_btn.clicked() {
+                                let email = self.auth_email.clone();
+                                let password = self.auth_password.clone();
+                                match Self::do_register(&email, &password) {
+                                    Ok(_) => self.auth_error = "Registered! Now login.".to_string(),
+                                    Err(e) => self.auth_error = e,
+                                }
+                            }
+                        });
+                    });
+                });
+            ctx.request_repaint();
+            return;
+        }
+
+        // Сайдбар
         egui::SidePanel::left("sidebar")
             .exact_width(155.0)
             .frame(egui::Frame::none()
@@ -173,12 +339,19 @@ impl eframe::App for RouteXApp {
                 });
                 ui.horizontal(|ui| {
                     ui.add_space(10.0);
+                    ui.label(RichText::new(format!("USER   {}", self.auth_email))
+                        .font(FontId::monospace(9.0))
+                        .color(CYAN_DIM));
+                });
+                ui.horizontal(|ui| {
+                    ui.add_space(10.0);
                     ui.label(RichText::new("PROTO  wireguard")
                         .font(FontId::monospace(9.0))
                         .color(CYAN_DIM));
                 });
             });
 
+        // Главная панель
         egui::CentralPanel::default()
             .frame(egui::Frame::none()
                 .fill(BG)
@@ -242,7 +415,6 @@ impl eframe::App for RouteXApp {
                                     });
                                 });
 
-                                // Пинг до VPS
                                 let (ping_tx, ping_rx) = std::sync::mpsc::channel::<f32>();
                                 self.ping_rx = Some(ping_rx);
                                 let server_addr_ping = self.server_addr.clone();
@@ -265,14 +437,14 @@ impl eframe::App for RouteXApp {
                                     }
                                 });
 
-                                // Прямой пинг до игровых серверов
                                 let (direct_tx, direct_rx) = std::sync::mpsc::channel::<f32>();
                                 self.direct_rx = Some(direct_rx);
 
                                 std::thread::spawn(move || {
                                     loop {
-                                        if let Some(ping) = crate::latency::LatencyMeter::icmp_ping("162.254.197.36") {
-
+                                        if let Some(ping) = crate::latency::LatencyMeter::icmp_ping(
+                                            "162.254.197.36"
+                                        ) {
                                             let _ = direct_tx.send(ping);
                                         }
                                         std::thread::sleep(std::time::Duration::from_secs(5));
@@ -292,7 +464,6 @@ impl eframe::App for RouteXApp {
 
                 ui.add_space(10.0);
 
-                // Метрики
                 ui.horizontal(|ui| {
                     let improvement = if self.direct_ping > 0.0 && self.current_ping > 0.0 {
                         self.direct_ping - self.current_ping
