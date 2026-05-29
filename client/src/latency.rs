@@ -32,14 +32,13 @@ impl LatencyMeter {
         }
     }
 
-   pub fn icmp_ping(addr: &str) -> Option<f32> {
-    let output = std::process::Command::new("ping")
-        .args(["-n", "4", "-w", "2000", addr])
-        .output()
-        .ok()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    log::debug!("PING OUTPUT:\n{}", text);  // добавь эту строку
-    for line in text.lines() {
+    pub fn icmp_ping(addr: &str) -> Option<f32> {
+        let output = std::process::Command::new("ping")
+            .args(["-n", "1", "-w", "2000", addr])
+            .output()
+            .ok()?;
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
             let lower = line.to_lowercase();
             if line.contains("Average") || line.contains("Среднее") || line.contains("сред") || line.contains("время=") || line.contains("time=") {                if let Some(ms) = Self::parse_ms(line) {
                     return Some(ms);
@@ -49,40 +48,24 @@ impl LatencyMeter {
         None
     }
 
-    fn parse_ms(line: &str) -> Option<f32> {
-    // Ищем "время=XXмс" или "time=XXms"
-    let line_lower = line.to_lowercase();
-    
-    // Русский формат: время=80мс
-    if let Some(pos) = line_lower.find("время=") {
-        let after = &line_lower[pos + "время=".len()..];
-        let num: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
-        if let Ok(v) = num.parse::<f32>() {
-            return Some(v);
-        }
-    }
-    
-    // Английский формат: time=80ms
-    if let Some(pos) = line_lower.find("time=") {
-        let after = &line_lower[pos + "time=".len()..];
-        let num: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
-        if let Ok(v) = num.parse::<f32>() {
-            return Some(v);
-        }
-    }
+    pub fn icmp_ping(addr: &str) -> Option<f32> {
+    // Запускаем ping через cmd с английской локалью
+    let output = std::process::Command::new("cmd")
+        .args(["/C", "chcp 437 >nul && ping -n 4 -w 2000", addr])
+        .output()
+        .ok()?;
 
-    // Среднее = XXмс
-    if let Some(idx) = line_lower.find("ms").or_else(|| line_lower.find("мс")) {
-        let before = &line_lower[..idx];
-        let num_str: String = before.chars().rev()
-            .take_while(|c| c.is_ascii_digit())
-            .collect::<String>()
-            .chars().rev().collect();
-        if let Ok(v) = num_str.parse::<f32>() {
-            return Some(v);
+    let text = String::from_utf8_lossy(&output.stdout);
+    log::debug!("PING OUTPUT:\n{}", text);
+
+    for line in text.lines() {
+        let lower = line.to_lowercase();
+        if lower.contains("average") || lower.contains("avg") {
+            if let Some(ms) = Self::parse_ms(line) {
+                return Some(ms);
+            }
         }
     }
-
     None
 }
 
