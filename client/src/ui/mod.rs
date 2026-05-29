@@ -15,6 +15,8 @@ pub struct RouteXApp {
     private_key: String,
     server_addr: String,
     server_public_key: String,
+    direct_ping: f32,
+    direct_rx: Option<std::sync::mpsc::Receiver<f32>>,
 }
 
 impl Default for RouteXApp {
@@ -33,6 +35,8 @@ impl Default for RouteXApp {
             private_key: String::new(),
             server_addr: "139.100.219.5:51820".to_string(),
             server_public_key: "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=".to_string(),
+            direct_ping: 0.0,
+            direct_rx: None,
         }
     }
 }
@@ -81,6 +85,12 @@ impl eframe::App for RouteXApp {
                 if self.ping_history.len() > 50 {
                     self.ping_history.remove(0);
                 }
+            }
+        }
+
+        if let Some(rx) = &self.direct_rx {
+            if let Ok(ping) = rx.try_recv() {
+                self.direct_ping = ping;
             }
         }
 
@@ -181,7 +191,6 @@ impl eframe::App for RouteXApp {
                     } else {
                         ("○", RED, "DISCONNECTED → IDLE".to_string())
                     };
-
                     ui.label(RichText::new(dot)
                         .font(FontId::monospace(12.0))
                         .color(status_color));
@@ -233,6 +242,7 @@ impl eframe::App for RouteXApp {
                                     });
                                 });
 
+                                // Пинг до VPS
                                 let (ping_tx, ping_rx) = std::sync::mpsc::channel::<f32>();
                                 self.ping_rx = Some(ping_rx);
                                 let server_addr_ping = self.server_addr.clone();
@@ -243,8 +253,7 @@ impl eframe::App for RouteXApp {
                                         sock.set_read_timeout(Some(
                                             std::time::Duration::from_millis(2000)
                                         )).unwrap();
-                                        let ping_addr = server_addr_ping
-                                            .replace(":51820", ":7777");
+                                        let ping_addr = server_addr_ping.replace(":51820", ":7777");
                                         let start = std::time::Instant::now();
                                         let _ = sock.send_to(b"ping", &ping_addr);
                                         let mut buf = [0u8; 4];
@@ -256,10 +265,27 @@ impl eframe::App for RouteXApp {
                                     }
                                 });
 
+                                // Прямой пинг до игровых серверов
+                                let (direct_tx, direct_rx) = std::sync::mpsc::channel::<f32>();
+                                self.direct_rx = Some(direct_rx);
+
+                                std::thread::spawn(move || {
+                                    loop {
+                                        if let Some(ping) = crate::latency::LatencyMeter::best_ping(
+                                            "185.25.182.1", 27015
+                                        ) {
+                                            let _ = direct_tx.send(ping);
+                                        }
+                                        std::thread::sleep(std::time::Duration::from_secs(5));
+                                    }
+                                });
+
                             } else {
                                 self.tunnel_tx = None;
                                 self.ping_rx = None;
+                                self.direct_rx = None;
                                 self.current_ping = 0.0;
+                                self.direct_ping = 0.0;
                             }
                         }
                     });
@@ -267,12 +293,21 @@ impl eframe::App for RouteXApp {
 
                 ui.add_space(10.0);
 
+                // Метрики
                 ui.horizontal(|ui| {
-                    let metrics = [
-                        ("LATENCY", format!("{:.0}ms", if self.connected { self.current_ping } else { 0.0 }), CYAN),
-                        ("PKT LOSS", "0.2%".to_string(), CYAN),
-                        ("TRAFFIC",  "1.4 mb/s".to_string(), YELLOW),
+                    let improvement = if self.direct_ping > 0.0 && self.current_ping > 0.0 {
+                        self.direct_ping - self.current_ping
+                    } else {
+                        0.0
+                    };
+                    let imp_color = if improvement > 0.0 { GREEN } else { GRAY };
+
+                    let metrics: &[(&str, String, Color32)] = &[
+                        ("ROUTEX", format!("{:.0}ms", if self.connected { self.current_ping } else { 0.0 }), CYAN),
+                        ("DIRECT", format!("{:.0}ms", if self.connected { self.direct_ping } else { 0.0 }), GRAY),
+                        ("SAVED",  format!("{:+.0}ms", if self.connected { improvement } else { 0.0 }), imp_color),
                     ];
+
                     for (label, value, color) in metrics {
                         egui::Frame::none()
                             .fill(BG2)
@@ -280,12 +315,12 @@ impl eframe::App for RouteXApp {
                             .inner_margin(8.0)
                             .show(ui, |ui| {
                                 ui.set_min_width(120.0);
-                                ui.label(RichText::new(label)
+                                ui.label(RichText::new(*label)
                                     .font(FontId::monospace(9.0))
                                     .color(CYAN_DIM));
-                                ui.label(RichText::new(&value)
+                                ui.label(RichText::new(value.as_str())
                                     .font(FontId::monospace(16.0))
-                                    .color(color));
+                                    .color(*color));
                             });
                         ui.add_space(6.0);
                     }

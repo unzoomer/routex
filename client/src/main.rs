@@ -3,6 +3,7 @@ mod routing;
 mod ui;
 mod games;
 mod config;
+mod latency;
 
 use tray_icon::{TrayIconBuilder, menu::{Menu, MenuItem}};
 
@@ -10,7 +11,6 @@ use tray_icon::{TrayIconBuilder, menu::{Menu, MenuItem}};
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    // Загружаем или создаём конфиг
     let cfg = config::Config::load_or_create();
     log::info!("Client public key: {}", cfg.public_key());
 
