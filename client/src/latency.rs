@@ -40,8 +40,7 @@ impl LatencyMeter {
         let text = String::from_utf8_lossy(&output.stdout);
         for line in text.lines() {
             let lower = line.to_lowercase();
-            if lower.contains("average") || lower.contains("среднее") || lower.contains("сред") {
-                if let Some(ms) = Self::parse_ms(line) {
+            if line.contains("Average") || line.contains("Среднее") || line.contains("сред") || line.contains("время=") || line.contains("time=") {                if let Some(ms) = Self::parse_ms(line) {
                     return Some(ms);
                 }
             }
@@ -50,15 +49,41 @@ impl LatencyMeter {
     }
 
     fn parse_ms(line: &str) -> Option<f32> {
-        let line = line.to_lowercase();
-        let idx = line.find("ms").or_else(|| line.find("мс"))?;
-        let before = &line[..idx];
+    // Ищем "время=XXмс" или "time=XXms"
+    let line_lower = line.to_lowercase();
+    
+    // Русский формат: время=80мс
+    if let Some(pos) = line_lower.find("время=") {
+        let after = &line_lower[pos + "время=".len()..];
+        let num: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(v) = num.parse::<f32>() {
+            return Some(v);
+        }
+    }
+    
+    // Английский формат: time=80ms
+    if let Some(pos) = line_lower.find("time=") {
+        let after = &line_lower[pos + "time=".len()..];
+        let num: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(v) = num.parse::<f32>() {
+            return Some(v);
+        }
+    }
+
+    // Среднее = XXмс
+    if let Some(idx) = line_lower.find("ms").or_else(|| line_lower.find("мс")) {
+        let before = &line_lower[..idx];
         let num_str: String = before.chars().rev()
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
             .chars().rev().collect();
-        num_str.parse().ok()
+        if let Ok(v) = num_str.parse::<f32>() {
+            return Some(v);
+        }
     }
+
+    None
+}
 
     pub fn best_ping(addr: &str, port: u16) -> Option<f32> {
         let addr1 = addr.to_string();
