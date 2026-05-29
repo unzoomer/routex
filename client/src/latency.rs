@@ -32,13 +32,14 @@ impl LatencyMeter {
         }
     }
 
-    pub fn icmp_ping(addr: &str) -> Option<f32> {
-        let output = std::process::Command::new("ping")
-            .args(["-n", "1", "-w", "2000", addr])
-            .output()
-            .ok()?;
-        let text = String::from_utf8_lossy(&output.stdout);
-        for line in text.lines() {
+   pub fn icmp_ping(addr: &str) -> Option<f32> {
+    let output = std::process::Command::new("ping")
+        .args(["-n", "4", "-w", "2000", addr])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    log::debug!("PING OUTPUT:\n{}", text);  // добавь эту строку
+    for line in text.lines() {
             let lower = line.to_lowercase();
             if line.contains("Average") || line.contains("Среднее") || line.contains("сред") || line.contains("время=") || line.contains("time=") {                if let Some(ms) = Self::parse_ms(line) {
                     return Some(ms);
