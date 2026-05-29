@@ -18,7 +18,7 @@ base64 = "0.22.1"
 ping = "0.7.1"
 tray-icon = "0.24.0"
 sysinfo = "0.39.2"
-rand = "0.10.1"
+rand = { version = "0.10.1", features = ["thread_rng"] }
 dirs = "6.0.0"
 
 [target.'cfg(windows)'.dependencies]

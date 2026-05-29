@@ -30,12 +30,17 @@ impl Config {
         }
     }
 
-    fn generate_key() -> String {
+        fn generate_key() -> String {
         use boringtun::x25519;
-        let mut rng = rand::thread_rng();
-        let secret = x25519::StaticSecret::random_from_rng(&mut rng);
-        use base64::{Engine as _, engine::general_purpose};
-        general_purpose::STANDARD.encode(secret.as_bytes())
+         use base64::{Engine as _, engine::general_purpose};
+    
+      // Генерируем случайные байты
+        let mut bytes = [0u8; 32];
+         for b in bytes.iter_mut() {
+        *b = rand::random::<u8>();
+          }
+         let secret = x25519::StaticSecret::from(bytes);
+         general_purpose::STANDARD.encode(secret.as_bytes())
     }
 
     fn config_dir() -> PathBuf {
