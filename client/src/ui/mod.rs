@@ -271,9 +271,8 @@ impl eframe::App for RouteXApp {
 
                                 std::thread::spawn(move || {
                                     loop {
-                                        if let Some(ping) = crate::latency::LatencyMeter::best_ping(
-                                            "185.25.182.1", 27015
-                                        ) {
+                                        if let Some(ping) = crate::latency::LatencyMeter::icmp_ping("162.254.197.36") {
+
                                             let _ = direct_tx.send(ping);
                                         }
                                         std::thread::sleep(std::time::Duration::from_secs(5));

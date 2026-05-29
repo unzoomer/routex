@@ -10,9 +10,9 @@ pub struct GameServer {
 }
 
 pub const CS2_SERVERS: &[GameServer] = &[
-    GameServer { game: "CS2", region: "EU-West",    addr: "185.25.182.1",   port: 27015 },
-    GameServer { game: "CS2", region: "EU-Central", addr: "185.25.182.100", port: 27015 },
-    GameServer { game: "CS2", region: "EU-East",    addr: "185.25.182.200", port: 27015 },
+    GameServer { game: "CS2", region: "EU-West",    addr: "162.254.197.36",  port: 27015 },
+    GameServer { game: "CS2", region: "EU-Central", addr: "162.254.197.40",  port: 27015 },
+    GameServer { game: "CS2", region: "EU-East",    addr: "162.254.197.42",  port: 27015 },
 ];
 
 pub struct LatencyMeter;
