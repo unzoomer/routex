@@ -12,6 +12,9 @@ pub struct RouteXApp {
     selected_game: usize,
     game_detector: crate::games::GameDetector,
     running_games: Vec<&'static crate::games::Game>,
+    private_key: String,
+    server_addr: String,
+    server_public_key: String,
 }
 
 impl Default for RouteXApp {
@@ -27,6 +30,20 @@ impl Default for RouteXApp {
             selected_game: 0,
             game_detector: crate::games::GameDetector::new(),
             running_games: Vec::new(),
+            private_key: String::new(),
+            server_addr: "139.100.219.5:51820".to_string(),
+            server_public_key: "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=".to_string(),
+        }
+    }
+}
+
+impl RouteXApp {
+    pub fn new(cfg: crate::config::Config) -> Self {
+        Self {
+            private_key: cfg.private_key,
+            server_addr: cfg.server_addr,
+            server_public_key: cfg.server_public_key,
+            ..Default::default()
         }
     }
 }
@@ -39,6 +56,7 @@ const RED:      Color32 = Color32::from_rgb(255, 0,   60);
 const GRAY:     Color32 = Color32::from_rgb(40,  60,  70);
 const TEXT:     Color32 = Color32::from_rgb(200, 216, 232);
 const YELLOW:   Color32 = Color32::from_rgb(170, 255, 0);
+const GREEN:    Color32 = Color32::from_rgb(0,   200, 100);
 
 struct Server {
     name: &'static str,
@@ -56,7 +74,6 @@ impl eframe::App for RouteXApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame += 1;
 
-        // Реальный пинг из фонового потока
         if let Some(rx) = &self.ping_rx {
             if let Ok(ping) = rx.try_recv() {
                 self.current_ping = ping;
@@ -65,6 +82,10 @@ impl eframe::App for RouteXApp {
                     self.ping_history.remove(0);
                 }
             }
+        }
+
+        if self.frame % 120 == 0 {
+            self.running_games = self.game_detector.detect_running();
         }
 
         ctx.style_mut(|s| {
@@ -76,7 +97,6 @@ impl eframe::App for RouteXApp {
             s.visuals.widgets.active.bg_fill = Color32::from_rgb(0, 40, 50);
         });
 
-        // Сайдбар
         egui::SidePanel::left("sidebar")
             .exact_width(155.0)
             .frame(egui::Frame::none()
@@ -149,14 +169,12 @@ impl eframe::App for RouteXApp {
                 });
             });
 
-        // Главная панель
         egui::CentralPanel::default()
             .frame(egui::Frame::none()
                 .fill(BG)
                 .inner_margin(egui::Margin::symmetric(14.0, 12.0)))
             .show(ctx, |ui| {
 
-                // Статус + кнопка
                 ui.horizontal(|ui| {
                     let (dot, status_color, status_text) = if self.connected {
                         ("●", CYAN, format!("CONNECTED → {}", SERVERS[self.selected_server].name))
@@ -187,7 +205,10 @@ impl eframe::App for RouteXApp {
                         if btn.clicked() {
                             self.connected = !self.connected;
                             if self.connected {
-                                // Туннель
+                                let private_key_clone = self.private_key.clone();
+                                let server_addr_clone = self.server_addr.clone();
+                                let server_pubkey_clone = self.server_public_key.clone();
+
                                 let (tx, rx) = std::sync::mpsc::channel::<bool>();
                                 self.tunnel_tx = Some(tx);
 
@@ -198,9 +219,9 @@ impl eframe::App for RouteXApp {
                                             Ok(adapter) => {
                                                 let tunnel = crate::tunnel::WireGuardTunnel::new(
                                                     adapter,
-                                                    "139.100.219.5:51820",
-                                                    &std::env::var("ROUTEX_PRIVATE_KEY").unwrap_or_default(),
-                                                    "s8qNGa7xgugqUQSpLEgiLRo6yrNRcAZFc3zPn5zQMmw=",
+                                                    &server_addr_clone,
+                                                    &private_key_clone,
+                                                    &server_pubkey_clone,
                                                 );
                                                 if let Err(e) = tunnel.run().await {
                                                     log::error!("Tunnel error: {}", e);
@@ -212,26 +233,28 @@ impl eframe::App for RouteXApp {
                                     });
                                 });
 
-                                // Пинг в фоне
                                 let (ping_tx, ping_rx) = std::sync::mpsc::channel::<f32>();
                                 self.ping_rx = Some(ping_rx);
+                                let server_addr_ping = self.server_addr.clone();
 
                                 std::thread::spawn(move || {
-                                   loop {
-        let sock = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
-        sock.set_read_timeout(Some(
-            std::time::Duration::from_millis(2000)
-        )).unwrap();
-        let start = std::time::Instant::now();
-        let _ = sock.send_to(b"ping", "139.100.219.5:7777");
-        let mut buf = [0u8; 4];
-        if sock.recv(&mut buf).is_ok() {
-            let ping = start.elapsed().as_millis() as f32;
-            let _ = ping_tx.send(ping);
-        }
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-});
+                                    loop {
+                                        let sock = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+                                        sock.set_read_timeout(Some(
+                                            std::time::Duration::from_millis(2000)
+                                        )).unwrap();
+                                        let ping_addr = server_addr_ping
+                                            .replace(":51820", ":7777");
+                                        let start = std::time::Instant::now();
+                                        let _ = sock.send_to(b"ping", &ping_addr);
+                                        let mut buf = [0u8; 4];
+                                        if sock.recv(&mut buf).is_ok() {
+                                            let ping = start.elapsed().as_millis() as f32;
+                                            let _ = ping_tx.send(ping);
+                                        }
+                                        std::thread::sleep(std::time::Duration::from_secs(1));
+                                    }
+                                });
 
                             } else {
                                 self.tunnel_tx = None;
@@ -244,7 +267,6 @@ impl eframe::App for RouteXApp {
 
                 ui.add_space(10.0);
 
-                // Метрики
                 ui.horizontal(|ui| {
                     let metrics = [
                         ("LATENCY", format!("{:.0}ms", if self.connected { self.current_ping } else { 0.0 }), CYAN),
@@ -271,7 +293,6 @@ impl eframe::App for RouteXApp {
 
                 ui.add_space(10.0);
 
-                // График
                 ui.label(RichText::new("# ping_monitor --live")
                     .font(FontId::monospace(10.0))
                     .color(CYAN_DIM));
@@ -296,61 +317,57 @@ impl eframe::App for RouteXApp {
                 }
 
                 ui.add_space(10.0);
-// Обнаружение игр каждые 2 секунды
-if self.frame % 120 == 0 {
-    self.running_games = self.game_detector.detect_running();
-}
 
-ui.label(RichText::new("# game_detect --auto")
-    .font(FontId::monospace(10.0))
-    .color(CYAN_DIM));
-ui.add_space(4.0);
+                ui.label(RichText::new("# game_detect --auto")
+                    .font(FontId::monospace(10.0))
+                    .color(CYAN_DIM));
+                ui.add_space(4.0);
 
-if self.running_games.is_empty() {
-    egui::Frame::none()
-        .fill(BG2)
-        .stroke(Stroke::new(1.0, GRAY))
-        .inner_margin(8.0)
-        .show(ui, |ui| {
-            ui.label(RichText::new("[ ] no games detected — launch a game")
-                .font(FontId::monospace(11.0))
-                .color(GRAY));
-        });
-} else {
-    for (i, game) in self.running_games.iter().enumerate() {
-        let is_sel = self.selected_game == i;
-        let border_color = if is_sel { CYAN } else { GRAY };
-        let resp = egui::Frame::none()
-            .fill(BG2)
-            .stroke(Stroke::new(if is_sel { 1.5 } else { 1.0 }, border_color))
-            .inner_margin(8.0)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(if is_sel { "[*]" } else { "[ ]" })
-                        .font(FontId::monospace(11.0))
-                        .color(border_color));
-                    ui.label(RichText::new(game.name)
-                        .font(FontId::monospace(11.0))
-                        .color(CYAN));
-                    ui.label(RichText::new(game.process)
-                        .font(FontId::monospace(9.0))
-                        .color(GRAY));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new("● RUNNING")
-                            .font(FontId::monospace(9.0))
-                            .color(Color32::from_rgb(0, 200, 100)));
-                    });
-                });
-            });
-        if resp.response.interact(egui::Sense::click()).clicked() {
-            self.selected_game = i;
-        }
-        ui.add_space(4.0);
-    }
-}
+                if self.running_games.is_empty() {
+                    egui::Frame::none()
+                        .fill(BG2)
+                        .stroke(Stroke::new(1.0, GRAY))
+                        .inner_margin(8.0)
+                        .show(ui, |ui| {
+                            ui.label(RichText::new("[ ] no games detected — launch a game")
+                                .font(FontId::monospace(11.0))
+                                .color(GRAY));
+                        });
+                } else {
+                    for (i, game) in self.running_games.iter().enumerate() {
+                        let is_sel = self.selected_game == i;
+                        let border_color = if is_sel { CYAN } else { GRAY };
+                        let resp = egui::Frame::none()
+                            .fill(BG2)
+                            .stroke(Stroke::new(if is_sel { 1.5 } else { 1.0 }, border_color))
+                            .inner_margin(8.0)
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new(if is_sel { "[*]" } else { "[ ]" })
+                                        .font(FontId::monospace(11.0))
+                                        .color(border_color));
+                                    ui.label(RichText::new(game.name)
+                                        .font(FontId::monospace(11.0))
+                                        .color(CYAN));
+                                    ui.label(RichText::new(game.process)
+                                        .font(FontId::monospace(9.0))
+                                        .color(GRAY));
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        ui.label(RichText::new("● RUNNING")
+                                            .font(FontId::monospace(9.0))
+                                            .color(GREEN));
+                                    });
+                                });
+                            });
+                        if resp.response.interact(egui::Sense::click()).clicked() {
+                            self.selected_game = i;
+                        }
+                        ui.add_space(4.0);
+                    }
+                }
 
-ui.add_space(8.0);
-                // Серверы
+                ui.add_space(8.0);
+
                 ui.label(RichText::new("# node_list --sort=latency")
                     .font(FontId::monospace(10.0))
                     .color(CYAN_DIM));
